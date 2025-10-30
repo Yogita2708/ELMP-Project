@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Leave Portal - Dashboard</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
+        /* Custom styles for status badges */
+        .status-Pending { background-color: #fef3c7; color: #b45309; }
+        .status-Approved { background-color: #d1fae5; color: #065f46; }
+        .status-Rejected { background-color: #fee2e2; color: #991b1b; }
+        .flash-message { transition: opacity 0.5s ease-in-out; }
+        /* Style for the action buttons in Admin view */
+        .admin-action-btn { @apply text-xs px-2 py-1 rounded-full font-medium shadow-sm transition duration-150; }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- Header & Navigation Bar -->
+    <header class="bg-indigo-600 shadow-xl sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-white tracking-wider">ELMP</h1>
+            
+            <nav class="flex items-center space-x-4">
+                
+                <!-- 1. Dashboard Link -->
+                <a href="{{ url_for('dashboard') }}" class="text-white hover:text-indigo-200 font-medium py-2 px-4 rounded-lg transition duration-300">
+                    My Dashboard
+                </a>
+
+                <!-- 2. NEW Company Info Link -->
+                <a href="{{ url_for('company_info') }}" class="text-white hover:text-indigo-200 font-medium py-2 px-4 rounded-lg transition duration-300">
+                    Company Info
+                </a>
+                
+                <!-- 3. Role Switcher -->
+                {% if user %}
+                <div class="relative group">
+                    <button class="flex items-center text-white bg-indigo-500 hover:bg-indigo-700 px-3 py-2 rounded-lg text-sm shadow-md transition duration-300">
+                        {{ user.role }}: {{ user.name }}
+                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div class="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition duration-200 pointer-events-none group-hover:pointer-events-auto">
+                        <div class="py-1">
+                            {% for id, profile in all_profiles.items() %}
+                            <a href="{{ url_for('switch_user', user_id=id) }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                Switch to {{ profile.role }}
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="space-y-3 mb-6">
+                {% for category, message in messages %}
+                    <div class="flash-message p-4 rounded-lg text-sm font-medium shadow-md
+                        {% if category == 'error' %} bg-red-100 text-red-800 border border-red-200
+                        {% elif category == 'success' %} bg-green-100 text-green-800 border border-green-200
+                        {% else %} bg-blue-100 text-blue-800 border border-blue-200
+                        {% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Employee Profile & Balances (Visible to all, but only populated for Employee) -->
+            <div class="lg:col-span-1 space-y-8">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">User Profile</h2>
+                    <dl class="text-sm space-y-2">
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-gray-500">Name:</dt>
+                            <dd class="text-gray-800 font-semibold">{{ user.name }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-gray-500">Employee ID:</dt>
+                            <dd class="text-gray-800">{{ user.id }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-gray-500">Role:</dt>
+                            <dd class="text-indigo-600 font-bold">{{ user.role }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-gray-500">Department:</dt>
+                            <dd class="text-gray-800">{{ user.department }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="font-medium text-gray-500">Manager:</dt>
+                            <dd class="text-gray-800">{{ user.manager }}</dd>
+                        </div>
+                    </dl>
+                </div>
+                
+                <!-- Leave Balances Card (Employee Only) -->
+                {% if user.role == 'Employee' %}
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h2 class="text-2xl font-bold text-indigo-700 mb-4 border-b pb-2">Current Balances</h2>
+                    {% if balances %}
+                    <ul class="space-y-3">
+                        {% for type, days in balances.items() %}
+                        <li class="flex justify-between items-center p-3 bg-indigo-50 rounded-lg shadow-sm">
+                            <span class="font-medium text-gray-700">{{ type.split('(')[0].strip() }}</span>
+                            <span class="text-xl font-extrabold text-indigo-600">{{ days }} <span class="text-sm font-medium">days</span></span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-sm text-gray-500">No leave balances available for your profile.</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <!-- Leave Application Form (Employee Only) -->
+                {% if user.role == 'Employee' %}
+                <div class="bg-white rounded-xl shadow-2xl p-6 border-t-4 border-indigo-500">
+                    <h2 class="text-2xl font-bold text-indigo-600 mb-5">Apply for Leave</h2>
+                    <form method="POST" action="{{ url_for('apply_leave') }}" class="space-y-4">
+                        
+                        <div>
+                            <label for="leave_type" class="block text-sm font-medium text-gray-700 mb-1">Leave Type</label>
+                            <select id="leave_type" name="leave_type" required 
+                                class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                                <option value="" disabled selected>Select a type...</option>
+                                {% for type in balances.keys() %}
+                                <option value="{{ type.split('(')[1].strip(')') }}">{{ type }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                                <input type="date" id="start_date" name="start_date" required min="{{ 'today' }}"
+                                    class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                                <input type="date" id="end_date" name="end_date" required min="{{ 'today' }}"
+                                    class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label for="reason" class="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                            <textarea id="reason" name="reason" rows="3" required placeholder="Briefly explain your need for leave..."
+                                class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                        </div>
+                        
+                        <button type="submit" 
+                            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.01]">
+                            Submit Leave Request
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Leave History / Admin Panel (Takes up 2/3 of the screen) -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    
+                    {% if user.role == 'Admin' %}
+                    <h2 class="text-3xl font-bold text-red-600 mb-5 border-b pb-3">Admin Approval Panel (All Requests)</h2>
+                    {% else %}
+                    <h2 class="text-3xl font-bold text-indigo-700 mb-5 border-b pb-3">My Leave History</h2>
+                    {% endif %}
+                    
+                    <!-- Leave History Table -->
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                                    <th class="px-6 py-3 rounded-tl-lg">ID</th>
+                                    {% if user.role == 'Admin' %}<th class="px-6 py-3">Employee</th>{% endif %}
+                                    <th class="px-6 py-3">Type</th>
+                                    <th class="px-6 py-3">Period</th>
+                                    <th class="px-6 py-3">Days</th>
+                                    <th class="px-6 py-3">Reason</th>
+                                    <th class="px-6 py-3">Submitted</th>
+                                    <th class="px-6 py-3 rounded-tr-lg text-center">Status</th>
+                                    {% if user.role == 'Admin' %}<th class="px-6 py-3 text-center rounded-tr-lg">Actions</th>{% endif %}
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                {% for request in history %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ request.request_id }}</td>
+                                    {% if user.role == 'Admin' %}<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ request.employee_name }}</td>{% endif %}
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-semibold">{{ request.leave_type }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ request.start_date }} to {{ request.end_date }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">{{ request.days }}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">{{ request.reason }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{{ request.date_submitted }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-center">
+                                        <span class="status-{{ request.status }} inline-flex px-3 py-1 text-xs leading-5 font-semibold rounded-full">
+                                            {{ request.status }}
+                                        </span>
+                                    </td>
+                                    
+                                    {% if user.role == 'Admin' %}
+                                    <td class="px-6 py-4 whitespace-nowrap text-center space-x-2">
+                                        {% if request.status == 'Pending' %}
+                                            <!-- Mock action links (needs backend route) -->
+                                            <button class="admin-action-btn bg-green-500 hover:bg-green-600 text-white">Approve</button>
+                                            <button class="admin-action-btn bg-red-500 hover:bg-red-600 text-white">Reject</button>
+                                        {% else %}
+                                            <span class="text-xs text-gray-400 italic">Actioned</span>
+                                        {% endif %}
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+</body>
+</html>

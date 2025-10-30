@@ -1,0 +1,52 @@
+.btn {
+  background-color: #0077b6;
+  color: white;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color 0.3s;
+}
+
+.btn:hover {
+  background-color: #005f8f;
+}
+
+.btn-secondary {
+  background-color: #00b4d8;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 25px;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 10px;
+  text-align: center;
+}
+
+th {
+  background-color: #0077b6;
+  color: white;
+}
+
+.leave-form {
+  display: flex;
+  flex-direction: column;
+  width: 50%;
+}
+
+.leave-form label {
+  margin-top: 10px;
+}
+
+.leave-form input, .leave-form select, .leave-form textarea {
+  padding: 8px;
+  margin-top: 5px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}

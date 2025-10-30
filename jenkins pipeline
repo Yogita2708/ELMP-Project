@@ -1,0 +1,72 @@
+pipeline {
+    agent any // Designates Jenkins can use any available agent
+
+    environment {
+        // Environment variable for the virtual environment directory
+        VENV_DIR = 'venv' 
+        // Define the recipient for the build status emails
+        BUILD_RECIPIENTS = 'Yogitaagrawal27@outlook.com'
+    }
+
+    stages {
+        stage('Checkout Source Code') {
+            steps {
+                // Assuming your Jenkins job is configured to pull from a Git repo
+                git branch: 'main', url: 'YOUR_GIT_REPOSITORY_URL'
+            }
+        }
+
+        stage('Build & Dependencies') {
+            steps {
+                echo 'Creating Python Virtual Environment and Installing Dependencies...'
+                // Create and activate the virtual environment
+                sh "python3 -m venv ${VENV_DIR}"
+                sh "source ${VENV_DIR}/bin/activate && pip install -r requirements.txt"
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                echo 'Running unit tests...'
+                // Run tests (Requires a test runner and test files, e.g., 'pytest')
+                sh "source ${VENV_DIR}/bin/activate && pytest"
+            }
+            // Post-test actions (e.g., publishing test reports)
+        }
+
+        stage('Deploy') {
+            steps {
+                echo 'Skipping deployment for local development, but this is where deployment commands go.'
+                // Example: Deploy to a server using SSH or push to a container registry
+                // sh 'ssh user@server "cd /path/to/app && git pull && restart service"'
+            }
+        }
+    }
+
+    post {
+        // This is where the status email logic is defined
+        always {
+            // Clean up the virtual environment directory
+            deleteDir()
+        }
+        success {
+            echo 'Build Successful - Sending Notification Email.'
+            // Use the Email Extension Plugin (emailext)
+            emailext (
+                subject: "SUCCESS: Jenkins Build #${BUILD_NUMBER} for ELMP",
+                body: "The build for the Employee Leave Portal Management was successful. View details here: ${env.BUILD_URL}",
+                to: BUILD_RECIPIENTS,
+                attachLog: true
+            )
+        }
+        failure {
+            echo 'Build Failed - Sending Notification Email.'
+            emailext (
+                subject: "FAILURE: Jenkins Build #${BUILD_NUMBER} for ELMP",
+                body: "The build for the Employee Leave Portal Management FAILED. Review the console output immediately: ${env.BUILD_URL}",
+                to: BUILD_RECIPIENTS,
+                attachLog: true
+            )
+        }
+    }
+}
