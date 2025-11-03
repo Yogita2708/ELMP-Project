@@ -1,69 +1,105 @@
 pipeline {
-    agent any // Designates Jenkins can use any available agent
+    agent any // Run on any available Jenkins agent
 
     environment {
-        // Environment variable for the virtual environment directory
-        VENV_DIR = 'venv' 
-        // Define the recipient for the build status emails
         BUILD_RECIPIENTS = 'Yogitaagrawal27@outlook.com'
+        
+        // --- IMPORTANT ---
+        // Change 'your-dockerhub-username' to your actual Docker Hub username
+        DOCKER_HUB_USERNAME = 'yogitaagarwal20076'
+        IMAGE_NAME = "${DOCKER_HUB_USERNAME}/elmp-app"
     }
 
     stages {
         stage('Checkout Source Code') {
             steps {
-                // Assuming your Jenkins job is configured to pull from a Git repo
-                git branch: 'main', url: 'YOUR_GIT_REPOSITORY_URL'
+                // This will use the Git URL configured in your Jenkins job
+                // Make sure your repo is public or Jenkins has credentials
+                git branch: 'main', url: 'https://github.com/Yogita2708/ELMP-Project.git'
             }
         }
 
-        stage('Build & Dependencies') {
-            steps {
-                echo 'Creating Python Virtual Environment and Installing Dependencies...'
-                // Create and activate the virtual environment
-                sh "python3 -m venv ${VENV_DIR}"
-                sh "source ${VENV_DIR}/bin/activate && pip install -r requirements.txt"
+        stage('Run Unit Tests') {
+            // We'll run this inside a clean Python container
+            agent {
+                docker {
+                    image 'python:3.10-slim'
+                    args '-u root' // Use root to install
+                }
             }
-        }
-        
-        stage('Test') {
             steps {
+                echo 'Installing dependencies for testing...'
+                // Use python -m pip to avoid path issues
+                sh 'python -m pip install -r requirements.txt'
+                
                 echo 'Running unit tests...'
-                // Run tests (Requires a test runner and test files, e.g., 'pytest')
-                sh "source ${VENV_DIR}/bin/activate && pytest"
+                // Run tests and generate a report for Jenkins to display
+                sh 'python -m pytest --junitxml=test-reports.xml'
             }
-            // Post-test actions (e.g., publishing test reports)
+            post {
+                // Always archive the test results, even if the build fails
+                always {
+                    junit 'test-reports.xml'
+                }
+            }
         }
 
-        stage('Deploy') {
+        stage('Build Docker Image') {
+            // This stage needs access to the host's Docker daemon
+            agent any
             steps {
-                echo 'Skipping deployment for local development, but this is where deployment commands go.'
-                // Example: Deploy to a server using SSH or push to a container registry
-                // sh 'ssh user@server "cd /path/to/app && git pull && restart service"'
+                echo "Building Docker image: ${IMAGE_NAME}:${BUILD_NUMBER}"
+                // Build the image using the Dockerfile
+                sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+                sh "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest"
+            }
+        }
+
+        stage('Push Docker Image') {
+            // This stage also needs Docker
+            agent any
+            steps {
+                echo "Pushing Docker image to Docker Hub..."
+                
+                // --- JENKINS CREDENTIALS ---
+                // 'dockerhub-creds' must be a 'Username with password'
+                // credential ID that you create in Jenkins
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    // Log in to Docker Hub
+                    sh "docker login -u ${DOCKER_USER} -p ${DOCKER_PASS}"
+                    
+                    // Push the new image
+                    sh "docker push ${IMAGE_NAME}:${BUILD_NUMBER}"
+                    sh "docker push ${IMAGE_NAME}:latest"
+                    
+                    // Log out
+                    sh "docker logout"
+                }
             }
         }
     }
 
     post {
-        // This is where the status email logic is defined
+        // This runs after all stages
         always {
-            // Clean up the virtual environment directory
-            deleteDir()
+            echo 'Build finished.'
         }
         success {
             echo 'Build Successful - Sending Notification Email.'
-            // Use the Email Extension Plugin (emailext)
+            // Send a success email
             emailext (
-                subject: "SUCCESS: Jenkins Build #${BUILD_NUMBER} for ELMP",
-                body: "The build for the Employee Leave Portal Management was successful. View details here: ${env.BUILD_URL}",
+                subject: "SUCCESS: Jenkins Build #${BUILD_NUMBER} for ${IMAGE_NAME}",
+                body: "The build for ${IMAGE_NAME} was successful. Image pushed to Docker Hub. View details: ${env.BUILD_URL}",
                 to: BUILD_RECIPIENTS,
                 attachLog: true
             )
         }
         failure {
             echo 'Build Failed - Sending Notification Email.'
+            // Send a failure email
             emailext (
-                subject: "FAILURE: Jenkins Build #${BUILD_NUMBER} for ELMP",
-                body: "The build for the Employee Leave Portal Management FAILED. Review the console output immediately: ${env.BUILD_URL}",
+                subject: "FAILURE: Jenkins Build #${BUILD_NUMBER} for ${IMAGE_NAME}",
+                body: "The build for ${IMAGE_NAME} FAILED. Review the console output immediately: ${env.BUILD_URL}",
                 to: BUILD_RECIPIENTS,
                 attachLog: true
             )

@@ -1,12 +1,9 @@
 ----------------------------------------
-
 Standard Python/Flask Ignore List
-
 ----------------------------------------
 
-Byte-compiled / optimized / dynamically generated files
-
-pycache/
+# Byte-compiled / optimized / dynamically generated files
+__pycache__/
 *.pyc
 *$py.class
 .mypy_cache/
@@ -14,60 +11,36 @@ pycache/
 .ruff_cache/
 .dmypy.json
 
-Environment
-
-Ignore the virtual environment folder entirely
-
+# Environment
+# Ignore the virtual environment folder entirely
 /venv/
 /env/
 
-Specific file created by venv and pipenv
-
+# Specific file created by venv and pipenv
 pip-log.txt
 pip-selfcheck.json
 .python-version
 
-IDE and Editor Files
-
-VS Code
-
+# IDE and Editor Files
 .vscode/
-
-Sublime Text
-
 *.sublime-workspace
-
-Atom
-
 .atom/
 
 ----------------------------------------
-
 Project-Specific Ignore List
-
 ----------------------------------------
 
-Database Files
-
-Although 'leave.db' is small, it's often best practice to ignore the
-
-local development database and let the deploy script create an empty one.
-
-For now, since you might be collaborating, you might keep it, but generally ignore:
-
+# Database Files
+# It's best practice to ignore the local dev database
 /leave.db
 
-Sensitive/Local Config Files (CRUCIAL for real-world apps)
-
-If you stored API keys or sensitive settings in a local file:
-
+# Sensitive/Local Config Files (CRUCIAL)
+# --- THIS IS THE MOST IMPORTANT PART ---
+# Never commit your secrets (passwords, API keys)
 .env
-
+*.env
 instance/
 
-config.py # (if it contains secrets)
-
-Log files
-
+# Log files
 *.log
 tmp/

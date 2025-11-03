@@ -6,18 +6,37 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-app = Flask(__name__)
-# IMPORTANT: Replace with a strong, secret key for production
-app.secret_key = 'super_secret_key_for_elmp' 
+import os # Make sure this is at the top
+import json # Make sure this is at the top
 
-# --- EMAIL CONFIGURATION (Mandatory to Update) ---
-# NOTE: If using Gmail, you MUST generate an App Password:
-# Google Account -> Security -> 2-Step Verification -> App passwords
+app = Flask(__name__)
+# Load secret key from environment variable for security
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'default-dev-secret-key-replace-me')
+
+# --- EMAIL CONFIGURATION (Loaded from Environment Variables) ---
+# NOTE: You MUST set these in your environment before running the app
+# Use a Gmail "App Password", NOT your regular password.
 SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
-EMAIL_ADDRESS = 'agarwalyogita24@gmail.com'  # <--- REPLACE WITH YOUR GMAIL ADDRESS
-EMAIL_PASSWORD = '1234567890yogita'          # <--- REPLACE WITH YOUR GENERATED APP PASSWORD
-HR_ADMIN_EMAIL = 'Yogitaagrawal27@outlook.com' # <--- HR Admin's Email (Anya)
+EMAIL_ADDRESS = os.environ.get('EMAIL_ADDRESS')
+EMAIL_PASSWORD = os.environ.get('EMAIL_PASSWORD')
+HR_ADMIN_EMAIL = os.environ.get('HR_ADMIN_EMAIL') # This is Anya's email
+
+# --- COMPANY INFO (FIX for company_info.html crash) ---
+COMPANY_DATA = {
+    "name": "Yachna Tech Solutions Pvt Ltd",
+    "mission": "To build cutting-edge solutions for a smarter world.",
+    "vision": "A seamlessly integrated digital future for every enterprise.",
+    "founding_year": 2019,
+    "headquarters": "Rajasthan, India",
+    "hr_contact": HR_ADMIN_EMAIL, # Uses the variable we set earlier
+    "leave_policy_summary": [
+        "All leave requests must be submitted via this portal.",
+        "Annual Leave (AL) must be approved 2 weeks in advance.",
+        "Sick Leave (SL) must be reported on the first day of absence.",
+        "Contact HR for any policy-related questions."
+    ]
+}
 
 # --- DATABASE SETUP AND UTILITIES ---
 
@@ -180,13 +199,18 @@ def dashboard():
         history = conn.execute("SELECT * FROM leaves ORDER BY date_submitted DESC").fetchall()
     
     conn.close()
+
+    # --- ADD THIS LINE ---
+    today_date = date.today().isoformat()
+    # ---------------------
     
     return render_template(
         'dashboard.html',
         user=user_data,
         balances=user_data['leave_balances'],
         history=history,
-        all_profiles=ALL_PROFILES
+        all_profiles=ALL_PROFILES,
+        min_date=today_date  # <-- This line you already have is correct
     )
 
 @app.route('/company_info')
@@ -194,11 +218,12 @@ def company_info():
     """Displays generic company information."""
     current_user_id = session.get('user_id', 'E101')
     user_data = get_current_user_data(current_user_id)
-    
+
     return render_template(
         'company_info.html', 
         user=user_data,
-        all_profiles=ALL_PROFILES
+        all_profiles=ALL_PROFILES,
+        company_info=COMPANY_DATA
     )
 
 
@@ -256,21 +281,96 @@ def apply_leave():
         conn.commit()
         conn.close()
 
-        # --- EMAIL NOTIFICATION INTEGRATION (NEW) ---
-        email_sent = send_notification_email(user_data['name'], full_leave_type, start_date_str, end_date_str, reason)
+       # --- EMAIL NOTIFICATION INTEGRATION (Temporarily Disabled) ---
+        # email_sent = send_notification_email(user_data['name'], full_leave_type, start_date_str, end_date_str, reason)
         
-        if email_sent:
-             flash('Leave request submitted successfully! HR Admin has been notified via email.', 'success')
-        else:
-             flash('Leave request submitted successfully, but email notification to Admin failed. Please check app.py configuration.', 'error')
+        # if email_sent:
+        #      flash('Leave request submitted successfully! HR Admin has been notified via email.', 'success')
+        # else:
+        #      flash('Leave request submitted successfully, but email notification to Admin failed. Please check app.py configuration.', 'error')
 
-
+        # --- New simple flash message ---
+        flash('Leave request submitted successfully!', 'success')
+        
     except Exception as e:
         flash(f'An unexpected error occurred during submission: {e}', 'error')
         print(f"Error submitting leave request: {e}")
 
     return redirect(url_for('dashboard'))
 
+@app.route('/admin/action', methods=['POST'])
+def admin_action():
+    """Handles Admin approve/reject actions."""
+    current_user_id = session.get('user_id')
+    user_data = get_current_user_data(current_user_id)
+
+    # Security check: Only Admins can perform this action
+    if not user_data or user_data['role'] != 'Admin':
+        flash('You do not have permission to perform this action.', 'error')
+        return redirect(url_for('dashboard'))
+
+    try:
+        request_id = request.form['request_id']
+        action = request.form['action'] # This will be 'Approve' or 'Reject'
+
+        conn = get_db_connection()
+        
+        if action == 'Approve':
+            # --- This is the complex part ---
+            # 1. Get the leave request details
+            leave_req = conn.execute("SELECT * FROM leaves WHERE request_id = ?", (request_id,)).fetchone()
+            
+            if not leave_req:
+                flash('Leave request not found.', 'error')
+                return redirect(url_for('dashboard'))
+
+            user_id = leave_req['user_id']
+            leave_type = leave_req['leave_type']
+            days_to_deduct = leave_req['days']
+
+            # 2. Get the employee's current balances
+            employee_data = get_current_user_data(user_id)
+            balances = employee_data['leave_balances']
+            
+            # 3. Check if they still have enough balance (in case they submitted another request)
+            current_balance = balances.get(leave_type, 0)
+            if days_to_deduct > current_balance:
+                flash(f"Approval failed: Employee no longer has sufficient balance for {leave_type}.", 'error')
+                # Optional: You could auto-reject it here
+                conn.execute("UPDATE leaves SET status = 'Rejected' WHERE request_id = ?", (request_id,))
+            else:
+                # 4. Deduct the days and update the user's balances in the DB
+                new_balance = current_balance - days_to_deduct
+                balances[leave_type] = new_balance
+                
+                # Convert balances dict back to a JSON string to save in DB
+                new_balances_json = json.dumps(balances)
+                
+                conn.execute("UPDATE users SET leave_balances = ? WHERE id = ?", (new_balances_json, user_id))
+                
+                # 5. Update the leave request status to 'Approved'
+                conn.execute("UPDATE leaves SET status = 'Approved' WHERE request_id = ?", (request_id,))
+                flash('Leave request approved and balance updated.', 'success')
+
+        elif action == 'Reject':
+            # This is easy, just update the status
+            conn.execute("UPDATE leaves SET status = 'Rejected' WHERE request_id = ?", (request_id,))
+            flash('Leave request rejected.', 'success')
+        
+        conn.commit()
+        conn.close()
+
+    except Exception as e:
+        flash(f'An unexpected error occurred: {e}', 'error')
+        print(f"Error in admin_action: {e}")
+
+    return redirect(url_for('dashboard'))
+
+@app.cli.command('init-db')
+def init_db_command():
+    """Clear existing data and create new tables."""
+    init_db()
+    print('Initialized the database.')
 
 if __name__ == '__main__':
     app.run(debug=True)
