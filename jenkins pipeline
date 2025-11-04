@@ -31,11 +31,14 @@ pipeline {
                 echo 'Installing dependencies for testing...'
                 // Use 'bat' for Windows commands
                 // We use python -m pip to ensure the correct pip is called
-                bat 'python -m pip install -r requirements.txt'
+                // This is the new line
+                bat 'py -m pip install -r requirements.txt'
+                
                 
                 echo 'Running unit tests...'
                 // Runs pytest and creates an XML report
-                bat 'python -m pytest --junitxml=test-reports.xml'
+                // This is the new line
+                bat 'py -m pytest --junitxml=test-reports.xml'
             }
             post {
                 // This block runs after the steps, even if they fail
