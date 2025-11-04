@@ -1,92 +1,89 @@
 pipeline {
-    agent any // Run on any available Jenkins agent
+    // This pipeline is designed to run on a Windows agent
+    agent any 
 
     environment {
         BUILD_RECIPIENTS = 'Yogitaagrawal27@outlook.com'
         
-        // --- IMPORTANT ---
-        // Change 'your-dockerhub-username' to your actual Docker Hub username
-        DOCKER_HUB_USERNAME = '24MCC20076@cuchd.in'
+        // Corrected Docker Hub username (from your info)
+        DOCKER_HUB_USERNAME = 'yogitaagarwal20076'
         IMAGE_NAME = "${DOCKER_HUB_USERNAME}/elmp-app"
     }
 
     stages {
+        
+        // Stage 1: Checkout Source Code
+        // This stage is now included. Jenkins will use the Git
+        // repository you configured in the "Pipeline script from SCM" section.
         stage('Checkout Source Code') {
             steps {
-                // This will use the Git URL configured in your Jenkins job
-                // Make sure your repo is public or Jenkins has credentials
-                git branch: 'main', url: 'https://github.com/Yogita2708/ELMP-Project.git'
+                // This command pulls the code from the Git repo
+                // configured in your Jenkins job.
+                checkout scm
             }
         }
 
+        // Stage 2: Run Unit Tests
+        // This runs directly on the Jenkins agent (not in Docker)
+        // to avoid the 'docker daemon' errors we saw earlier.
         stage('Run Unit Tests') {
-            // We'll run this inside a clean Python container
-            agent {
-                docker {
-                    image 'python:3.10-slim'
-                    args '-u root' // Use root to install
-                }
-            }
             steps {
                 echo 'Installing dependencies for testing...'
-                // Use python -m pip to avoid path issues
-                sh 'python -m pip install -r requirements.txt'
+                // Use 'bat' for Windows commands
+                // We use python -m pip to ensure the correct pip is called
+                bat 'python -m pip install -r requirements.txt'
                 
                 echo 'Running unit tests...'
-                // Run tests and generate a report for Jenkins to display
-                sh 'python -m pytest --junitxml=test-reports.xml'
+                // Runs pytest and creates an XML report
+                bat 'python -m pytest --junitxml=test-reports.xml'
             }
             post {
-                // Always archive the test results, even if the build fails
+                // This block runs after the steps, even if they fail
                 always {
+                    // This publishes the test results to the Jenkins dashboard
                     junit 'test-reports.xml'
                 }
             }
         }
 
+        // Stage 3: Build Docker Image
         stage('Build Docker Image') {
-            // This stage needs access to the host's Docker daemon
-            agent any
             steps {
                 echo "Building Docker image: ${IMAGE_NAME}:${BUILD_NUMBER}"
-                // Build the image using the Dockerfile
-                sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
-                sh "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest"
+                // Make sure Docker Desktop is running on your machine!
+                bat "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+                bat "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest"
             }
         }
 
+        // Stage 4: Push Docker Image
         stage('Push Docker Image') {
-            // This stage also needs Docker
-            agent any
             steps {
                 echo "Pushing Docker image to Docker Hub..."
                 
-                // --- JENKINS CREDENTIALS ---
-                // 'dockerhub-creds' must be a 'Username with password'
-                // credential ID that you create in Jenkins
+                // Corrected credentialsId to 'dockerhub-creds'
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     // Log in to Docker Hub
-                    sh "docker login -u ${DOCKER_USER} -p ${DOCKER_PASS}"
+                    bat "docker login -u ${DOCKER_USER} -p ${DOCKER_PASS}"
                     
                     // Push the new image
-                    sh "docker push ${IMAGE_NAME}:${BUILD_NUMBER}"
-                    sh "docker push ${IMAGE_NAME}:latest"
+                    bat "docker push ${IMAGE_NAME}:${BUILD_NUMBER}"
+                    bat "docker push ${IMAGE_NAME}:latest"
                     
                     // Log out
-                    sh "docker logout"
+                    bat "docker logout"
                 }
             }
         }
     }
 
     post {
-        // This runs after all stages
+        // This section runs at the end of the entire pipeline
         always {
             echo 'Build finished.'
         }
         success {
             echo 'Build Successful - Sending Notification Email.'
-            // Send a success email
             emailext (
                 subject: "SUCCESS: Jenkins Build #${BUILD_NUMBER} for ${IMAGE_NAME}",
                 body: "The build for ${IMAGE_NAME} was successful. Image pushed to Docker Hub. View details: ${env.BUILD_URL}",
@@ -96,7 +93,6 @@ pipeline {
         }
         failure {
             echo 'Build Failed - Sending Notification Email.'
-            // Send a failure email
             emailext (
                 subject: "FAILURE: Jenkins Build #${BUILD_NUMBER} for ${IMAGE_NAME}",
                 body: "The build for ${IMAGE_NAME} FAILED. Review the console output immediately: ${env.BUILD_URL}",
@@ -106,3 +102,4 @@ pipeline {
         }
     }
 }
+
