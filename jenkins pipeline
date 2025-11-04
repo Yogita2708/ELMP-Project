@@ -6,7 +6,7 @@ pipeline {
         
         // --- IMPORTANT ---
         // Change 'your-dockerhub-username' to your actual Docker Hub username
-        DOCKER_HUB_USERNAME = 'yogitaagarwal20076'
+        DOCKER_HUB_USERNAME = '24MCC20076@cuchd.in'
         IMAGE_NAME = "${DOCKER_HUB_USERNAME}/elmp-app"
     }
 
