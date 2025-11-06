@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  elmp-app:
+    # This tells Compose to pull the image we pushed to Docker Hub
+    image: yogitaagarwal20076/elmp-app:latest
+    container_name: elmp-production
+    ports:
+      # Maps the server's public port 80 (HTTP) to the container's port 8000
+      - "80:8000"
+
+    # This tells the container to restart automatically if it ever fails
+    restart: always
+
+    # This tells the container to load the secrets file
+    # from the server's local directory
+    env_file:
+      - ./.env
