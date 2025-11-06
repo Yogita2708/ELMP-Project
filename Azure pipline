@@ -1,0 +1,91 @@
+# This file tells Azure Pipelines what to do
+# It's the replacement for our 'jenkins pipeline' file
+
+trigger:
+- master  # Start this pipeline whenever code is pushed to the 'master' branch
+
+variables:
+  # --- Define our variables ---
+  
+  # This is the name of your Azure Container Registry
+  # You must get this from your Azure portal
+  azureContainerRegistry: 'yourACRName.azurecr.io'
+  
+  # This is the name of your web app in Azure
+  # You get this when you create the App Service
+  azureWebAppName: 'your-elmp-app-name'
+  
+  # This is the name of the image we will build
+  imageName: 'elmp-app'
+
+# We'll run this on a virtual machine hosted by Microsoft
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: Build_and_Test
+  displayName: 'Build & Test Stage'
+  jobs:
+  - job: Build
+    displayName: 'Build, Test, and Push Docker Image'
+    steps:
+    
+    # --- STAGE 1: Run Unit Tests (Same as Jenkins) ---
+    - task: UsePythonVersion@0
+      displayName: 'Set up Python 3.10'
+      inputs:
+        versionSpec: '3.10'
+        
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest
+      displayName: 'Install Python dependencies'
+      
+    - script: |
+        pytest --junitxml=test-reports.xml
+      displayName: 'Run Pytest Unit Tests'
+
+    - task: PublishTestResults@2
+      displayName: 'Publish Test Results'
+      inputs:
+        testResultsFiles: 'test-reports.xml'
+      condition: succeededOrFailed() # Always publish, even if tests fail
+
+    # --- STAGE 2: Build & Push Docker Image (Same as Jenkins) ---
+    - task: Docker@2
+      displayName: 'Build and Push Docker Image'
+      inputs:
+        # Tell Azure to find our Dockerfile
+        command: 'buildAndPush'
+        repository: '$(imageName)'
+        dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+        
+        # Connect to our Azure Container Registry
+        containerRegistry: 'your-azure-registry-service-connection' # You set this up in Azure DevOps
+        
+        # Tag the image with the build number
+        tags: |
+          $(Build.BuildId)
+          latest
+
+- stage: Deploy_to_Azure
+  displayName: 'Deploy Stage'
+  # This stage only runs if the 'Build' stage succeeded
+  dependsOn: Build_and_Test 
+  condition: succeeded(Build_and_Test)
+  jobs:
+  - job: Deploy
+    displayName: 'Deploy to Azure App Service'
+    steps:
+    - task: AzureWebAppContainer@1
+      displayName: 'Deploy Container to App Service'
+      inputs:
+        # Your Azure subscription
+        azureSubscription: 'your-azure-subscription-service-connection'
+        
+        # The name of your app
+        appName: '$(azureWebAppName)'
+        
+        # The full name of the image we just pushed
+        imageName: '$(azureContainerRegistry)/$(imageName):$(Build.BuildId)'
